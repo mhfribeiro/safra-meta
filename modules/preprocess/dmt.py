@@ -26,6 +26,8 @@ class DMT(object):
             self.classes = None
             self.minima = None
             self.maxima = None
+            self.outliers_inf = None
+            self.outliers_sup = None
 
             if self.file_format == 'csv':
                   self.df = pd.read_csv(self.file, sep=self.sep)
@@ -46,20 +48,44 @@ class DMT(object):
             print('-------------------------------------')
             print()
 
-      def save_csv(self, output_file):
-            self.df.to_csv(output_file, sep=self.sep, decimal=self.decimal, quoting=csv.QUOTE_NONNUMERIC, index=False)
+      def save_csv(self, output_file, numeric_only=False):
+            if numeric_only:
+                  data = self.get_numeric_data()
+            else:
+                  data = self.df
 
-      def save_json(self, output_file, orient='index'):
-            self.df.to_json(output_file, orient=self.orient)
+            data.to_csv(output_file, sep=self.sep, decimal=self.decimal, quoting=csv.QUOTE_NONNUMERIC, index=False)
 
-      def save_dict(self, output_file):
-            pkl.dump(self.df.to_dict(orient=self.orient), open(output_file, 'wb'))
+      def save_json(self, output_file, orient='index', numeric_only=False):
+            if numeric_only:
+                  data = self.get_numeric_data()
+            else:
+                  data = self.df
 
-      def get_json(self):
-            return self.df.to_json(orient=self.orient)
+            data.to_json(output_file, orient=self.orient)
 
-      def get_dict(self):
-            return self.df.to_dict(orient=self.orient)
+      def save_dict(self, output_file, numeric_only=False):
+            if numeric_only:
+                  data = self.get_numeric_data()
+            else:
+                  data = self.df
+
+            pkl.dump(data.to_dict(orient=self.orient), open(output_file, 'wb'))
+
+      def get_json(self, numeric_only=False):
+            if numeric_only:
+                  data = self.get_numeric_data()
+            else:
+                  data = self.df
+            return data.to_json(orient=self.orient)
+
+      def get_dict(self, numeric_only=False):
+            if numeric_only:
+                  data = self.get_numeric_data()
+            else:
+                  data = self.df
+
+            return data.to_dict(orient=self.orient)
 
       ############ Column manipulation Methods ####################
       def drop_columns(self, col_list):
@@ -85,7 +111,7 @@ class DMT(object):
 
       ############ Data Transformation Methods ####################
       def normalize(self):
-            numeric_data = self.df._get_numeric_data()
+            numeric_data = self.get_numeric_data()
             maxima = numeric_data.max()
             minima = numeric_data.min()
 
@@ -101,44 +127,43 @@ class DMT(object):
 
       def denormalize(self):
             if (self.minima is not None) and (self.maxima is not None):
-                  numeric_data = self.df._get_numeric_data()
+                  numeric_data = self.get_numeric_data()
                   numeric_data = numeric_data * (self.maxima - self.minima) + self.minima
                   self.df[numeric_data.columns] = numeric_data
 
       def split_outliers(self, limQ1=25, limQ3=75, c=1.5):
-            numeric_data = self.df._get_numeric_data()
+            numeric_data = self.get_numeric_data()
 
             q1 = np.percentile(numeric_data, limQ1, axis=0)
             q3 = np.percentile(numeric_data, limQ3, axis=0)
             iqr = sts.iqr(numeric_data, axis=0)
 
-            # Até aqui OK
+            keep = []
+            sup = []
+            inf = []
 
-            new_data = []
-            ix_data = []
-            outliers_inf = []
-            ix_inf = []
-            outliers_sup = []
-            ix_sup = []
-
-            i = 0
-            for d in data:
+            for i in range(len(numeric_data)):
+                  d = numeric_data.loc[numeric_data.index[i]]
                   test_inf = d < q1 - c * iqr
                   if test_inf.any():
-                        outliers_inf.append(d)
-                        ix_inf.append(i)
+                        inf.append(i)
                   else:
                         test_sup = d > q3 + c * iqr
                         if test_sup.any():
-                              outliers_sup.append(d)
-                              ix_sup.append(i)
+                              sup.append(i)
                         else:
-                              new_data.append(d)
-                              ix_data.append(i)
-                  i += 1
+                              keep.append(i)
 
-            new_data = pd.DataFrame(np.array(new_data), index=numeric_data.index[ix_data], columns=numeric_data.columns)
-            outliers_inf = pd.DataFrame(np.array(outliers_inf), index=numeric_data.index[ix_inf], columns=numeric_data.columns)
-            outliers_sup = pd.DataFrame(np.array(outliers_sup), index=numeric_data.index[ix_sup], columns=numeric_data.columns)
+            drop = False
+            if len(inf):
+                  self.outliers_inf = self.df.loc[self.df.index[inf]]
+                  drop = True
+            if len(sup):
+                  self.outliers_sup = self.df.loc[self.df.index[sup]]
+                  drop = True
+            if drop:
+                  self.df.drop(inf + sup, inplace=True)
 
-            return new_data, outliers_inf, outliers_sup
+      def get_numeric_data(self):
+            return self.df._get_numeric_data()
+
