@@ -23,4 +23,9 @@ print('Depois: %d' % len(db))
 db.set_class('y')
 db.normalize()
 
-print(db)
+db.print_summary()
+print(db['X11'])
+
+for dt in db:
+      print(dt)
+      print()

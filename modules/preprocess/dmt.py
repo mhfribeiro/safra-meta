@@ -30,6 +30,8 @@ class DMT(object):
             self.outliers_sup = None
 
             self.normalized = False
+            # _index is used for iterator
+            self._index = 0
 
             if self.file_format == 'csv':
                   self.df = pd.read_csv(self.file, sep=self.sep)
@@ -116,11 +118,26 @@ class DMT(object):
       def set_categorical(self, column):
             self.df[column] = self.df[column].astype(str)
 
+      ########### Magical Methods #################################
       def __len__(self):
             return len(self.df)
 
       def __str__(self):
             return str(self.df)
+
+      def __getitem__(self, index):
+            return self.df[index]
+
+      def __iter__(self):
+            return self
+
+      def __next__(self):
+            try:
+                  result = self.df.loc[self.df.index[self._index]]
+            except IndexError:
+                  raise StopIteration
+            self._index += 1
+            return result
 
       ############ Data Transformation Methods ####################
       def get_stats(self, output_format='df'):
